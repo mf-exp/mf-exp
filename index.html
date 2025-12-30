@@ -32,7 +32,7 @@
 <body class="text-slate-900 antialiased">
     <div id="root"></div>
 
-    <!-- Firebase SDKs loaded via Compat layer for easier single-file setup -->
+    <!-- Firebase SDKs loaded via Compat layer -->
     <script src="https://www.gstatic.com/firebasejs/11.1.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/11.1.0/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/11.1.0/firebase-firestore-compat.js"></script>
@@ -40,13 +40,24 @@
     <script type="text/babel">
         const { useState, useEffect } = React;
 
-        // --- Firebase Initialization ---
-        // These global variables are provided by the environment at runtime
-        const firebaseConfig = JSON.parse(__firebase_config);
-        const app = firebase.initializeApp(firebaseConfig);
-        const auth = firebase.auth();
-        const db = firebase.firestore();
+        // --- SAFE INITIALIZATION ---
+        let firebaseConfig = {};
+        try {
+            // Check if the environment provided a config, otherwise use an empty object to prevent crash
+            firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+        } catch (e) {
+            console.error("Firebase config error:", e);
+        }
+
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'motion-factory-ledger';
+
+        // Initialize Firebase only if config exists
+        if (firebaseConfig.apiKey) {
+            firebase.initializeApp(firebaseConfig);
+        }
+
+        const auth = firebase.apps.length ? firebase.auth() : null;
+        const db = firebase.apps.length ? firebase.firestore() : null;
 
         const Icon = ({ name, size = 16, className = "" }) => {
             useEffect(() => { if (window.lucide) window.lucide.createIcons(); }, [name]);
@@ -64,6 +75,11 @@
             const [incForm, setIncForm] = useState({ date: new Date().toISOString().split('T')[0], note: '', amtJaimin: '', amtKamal: '' });
 
             useEffect(() => {
+                if (!auth) {
+                    setStatus('error');
+                    return;
+                }
+
                 const initAuth = async () => {
                     try {
                         if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
@@ -85,7 +101,7 @@
             }, []);
 
             useEffect(() => {
-                if (!user) return;
+                if (!user || !db) return;
                 const path = `artifacts/${appId}/public/data/ledger`;
                 const unsubscribe = db.collection(path)
                     .onSnapshot((snapshot) => {
@@ -104,7 +120,7 @@
             };
 
             const submitEntry = async (type) => {
-                if (!user) return;
+                if (!user || !db) return;
                 const form = type === 'expense' ? expForm : incForm;
                 const amtJ = parseFloat(form.amtJaimin) || 0;
                 const amtK = parseFloat(form.amtKamal) || 0;
@@ -133,7 +149,7 @@
             };
 
             const confirmDelete = async () => {
-                if (!user || !deleteConfirm) return;
+                if (!user || !deleteConfirm || !db) return;
                 try {
                     await db.doc(`artifacts/${appId}/public/data/ledger/${deleteConfirm}`).delete();
                     setDeleteConfirm(null);
@@ -154,6 +170,18 @@
 
             const expT = totals('expense');
             const incT = totals('income');
+
+            if (status === 'error') {
+                return (
+                    <div className="flex items-center justify-center min-h-screen p-6 text-center">
+                        <div className="bg-white p-8 rounded-2xl shadow-xl border border-slate-200">
+                            <Icon name="alert-triangle" size={48} className="text-rose-500 mx-auto mb-4" />
+                            <h2 className="text-xl font-bold mb-2">Configuration Missing</h2>
+                            <p className="text-sm text-slate-500">Please make sure to set your Firebase Config in the script tags.</p>
+                        </div>
+                    </div>
+                );
+            }
 
             return (
                 <div className="min-h-screen pb-12">
