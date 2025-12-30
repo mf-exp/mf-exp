@@ -2,9 +2,17 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Motion Factory Manager</title>
-    <!-- Libraries for React, Tailwind CSS, and Icons -->
+    
+    <!-- PWA & Android App Meta Tags -->
+    <meta name="theme-color" content="#0f172a">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/599/599370.png">
+
+    <!-- Libraries -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
@@ -17,8 +25,15 @@
 
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
-        body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #f8fafc; }
-        .neo-shadow { box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05), 0 4px 6px -2px rgba(0, 0, 0, 0.02); }
+        body { 
+            font-family: 'Plus Jakarta Sans', sans-serif; 
+            background-color: #f8fafc;
+            overscroll-behavior-y: contain; /* Prevents pull-to-refresh in app mode */
+        }
+        /* Mobile optimization: make tap targets larger */
+        button, input {
+            min-height: 44px;
+        }
     </style>
 </head>
 <body>
@@ -27,8 +42,32 @@
     <script type="text/babel">
         const { useState, useEffect } = React;
 
-        // --- Firebase Configuration ---
-        // NOTE: In a local Notepad setup, you should replace this with your actual Firebase config object
+        // --- PWA AUTO-MANIFEST GENERATOR ---
+        // This tells Android how to show the app on your home screen
+        const initPWA = () => {
+            const manifest = {
+                "name": "Motion Factory Manager",
+                "short_name": "MF Manager",
+                "start_url": ".",
+                "display": "standalone",
+                "background_color": "#ffffff",
+                "theme_color": "#0f172a",
+                "icons": [{
+                    "src": "https://cdn-icons-png.flaticon.com/512/599/599370.png",
+                    "sizes": "512x512",
+                    "type": "image/png"
+                }]
+            };
+            const stringManifest = JSON.stringify(manifest);
+            const blob = new Blob([stringManifest], {type: 'application/json'});
+            const manifestURL = URL.createObjectURL(blob);
+            document.querySelector('head').insertAdjacentHTML('beforeend', `<link rel="manifest" href="${manifestURL}">`);
+        };
+        initPWA();
+
+        // =========================================================
+        // STEP 1: PASTE YOUR FIREBASE CONFIGURATION BELOW
+        // =========================================================
         const firebaseConfig = {
     apiKey: "AIzaSyCbub9ifyELCi9BhOYBeOFBYSf-UZAD7-I",
     authDomain: "mf-final.firebaseapp.com",
@@ -37,85 +76,114 @@
     messagingSenderId: "20592787318",
     appId: "1:20592787318:web:a10c5d7e47e7cffc304457",
     measurementId: "G-N2YRN9JFXC"
-  };
-        firebase.initializeApp(firebaseConfig);
-        const auth = firebase.auth();
-        const db = firebase.firestore();
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'motion-factory-ledger';
+  }; 
+
+        // =========================================================
+        // END OF CONFIGURATION - DO NOT EDIT BELOW THIS LINE
+        // =========================================================
+
+        try {
+            if (typeof __firebase_config !== 'undefined' && !firebaseConfig) {
+                firebaseConfig = JSON.parse(__firebase_config);
+            }
+        } catch (e) { 
+            firebaseConfig = null; 
+        }
 
         function App() {
-            const [isAuthenticated, setIsAuthenticated] = useState(false);
+            const [currentUser, setCurrentUser] = useState(null);
+            const [selectedRole, setSelectedRole] = useState('Jaimin');
             const [password, setPassword] = useState('');
             const [loginError, setLoginError] = useState('');
             const [transactions, setTransactions] = useState([]);
-            const [toast, setToast] = useState(null);
+            const [note, setNote] = useState('');
+            const [amount, setAmount] = useState('');
 
-            const [expForm, setExpForm] = useState({ date: new Date().toISOString().split('T')[0], note: '', amtJaimin: '', amtKamal: '' });
-            const [incForm, setIncForm] = useState({ date: new Date().toISOString().split('T')[0], note: '', amtJaimin: '', amtKamal: '' });
+            const PASSWORDS = {
+                'Jaimin': 'jaimin123',
+                'Kamal': 'kamal123'
+            };
 
-            // Auto-login if session exists
+            if (!firebaseConfig) {
+                return (
+                    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
+                        <div className="bg-white p-8 rounded-3xl shadow-xl max-w-md border-t-8 border-amber-500 text-center">
+                            <h2 className="text-2xl font-black text-slate-800 mb-4">Cloud Setup Required</h2>
+                            <p className="text-slate-600 mb-6">To run this as an <b>Android App</b>, you must first add your Firebase keys in Step 1 of the code.</p>
+                        </div>
+                    </div>
+                );
+            }
+
+            if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+            const db = firebase.firestore();
+            const appId = typeof __app_id !== 'undefined' ? __app_id : 'motion-factory-ledger';
+
             useEffect(() => {
-                if (localStorage.getItem('mf_session') === 'true') {
-                    setIsAuthenticated(true);
-                }
-                auth.signInAnonymously().catch(console.error);
+                const savedUser = localStorage.getItem('mf_user');
+                if (savedUser) setCurrentUser(savedUser);
+                firebase.auth().signInAnonymously().catch(err => console.error("Login failed", err));
             }, []);
 
-            // Real-time listener
             useEffect(() => {
-                if (!isAuthenticated) return;
+                if (!currentUser) return;
                 const unsubscribe = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('ledger')
                     .onSnapshot(snapshot => {
                         const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                         setTransactions(data.sort((a, b) => new Date(b.date) - new Date(a.date)));
+                    }, err => {
+                        console.error("Firestore error", err);
                     });
                 return () => unsubscribe();
-            }, [isAuthenticated]);
+            }, [currentUser]);
 
             const handleLogin = (e) => {
                 e.preventDefault();
-                if (password === "mf-manager-2024") {
-                    setIsAuthenticated(true);
-                    localStorage.setItem('mf_session', 'true');
+                if (password === PASSWORDS[selectedRole]) {
+                    setCurrentUser(selectedRole);
+                    localStorage.setItem('mf_user', selectedRole);
+                    setLoginError('');
                 } else {
-                    setLoginError('Invalid Password');
+                    setLoginError('Wrong password for ' + selectedRole);
                 }
             };
 
-            const submitEntry = async (type) => {
-                const form = type === 'expense' ? expForm : incForm;
-                const amtJ = parseFloat(form.amtJaimin) || 0;
-                const amtK = parseFloat(form.amtKamal) || 0;
-
-                if (!form.note || (amtJ === 0 && amtK === 0)) return;
-
-                await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('ledger').add({
-                    date: form.date,
-                    note: form.note,
-                    amount: amtJ || amtK,
-                    partner: amtJ > 0 ? 'Jaimin' : 'Kamal',
-                    type: type
-                });
-
-                const reset = { date: new Date().toISOString().split('T')[0], note: '', amtJaimin: '', amtKamal: '' };
-                type === 'expense' ? setExpForm(reset) : setIncForm(reset);
+            const addEntry = async () => {
+                if (!note || !amount) return;
+                try {
+                    await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('ledger').add({
+                        date: new Date().toISOString().split('T')[0],
+                        note: note,
+                        amount: parseFloat(amount),
+                        partner: currentUser,
+                        type: 'expense'
+                    });
+                    setNote('');
+                    setAmount('');
+                } catch (err) {
+                    alert("Error saving: " + err.message);
+                }
             };
 
-            if (!isAuthenticated) {
+            const logout = () => {
+                localStorage.removeItem('mf_user');
+                setCurrentUser(null);
+                setPassword('');
+            };
+
+            if (!currentUser) {
                 return (
                     <div className="min-h-screen bg-slate-900 flex items-center justify-center p-6">
-                        <div className="max-w-md w-full bg-white rounded-3xl p-8 shadow-2xl">
-                            <h1 className="text-2xl font-black text-center mb-6">MOTION FACTORY</h1>
+                        <div className="max-w-md w-full bg-white rounded-3xl p-8 shadow-2xl text-center">
+                            <h1 className="text-2xl font-black mb-6">MOTION FACTORY</h1>
+                            <div className="flex gap-2 mb-6 bg-slate-100 p-1 rounded-xl">
+                                <button onClick={() => setSelectedRole('Jaimin')} className={`flex-1 py-2 rounded-lg font-bold transition ${selectedRole === 'Jaimin' ? 'bg-white shadow text-blue-600' : 'text-slate-400'}`}>Jaimin</button>
+                                <button onClick={() => setSelectedRole('Kamal')} className={`flex-1 py-2 rounded-lg font-bold transition ${selectedRole === 'Kamal' ? 'bg-white shadow text-purple-600' : 'text-slate-400'}`}>Kamal</button>
+                            </div>
                             <form onSubmit={handleLogin} className="space-y-4">
-                                <input 
-                                    type="password" 
-                                    className="w-full border-2 p-3 rounded-xl outline-none focus:border-blue-500"
-                                    placeholder="Enter Password"
-                                    value={password}
-                                    onChange={e => setPassword(e.target.value)}
-                                />
-                                {loginError && <p className="text-red-500 text-xs text-center">{loginError}</p>}
-                                <button type="submit" className="w-full bg-slate-900 text-white font-bold py-3 rounded-xl">Unlock</button>
+                                <input type="password" border-2 className="w-full border-2 p-3 rounded-xl outline-none focus:border-slate-900" placeholder={`Password for ${selectedRole}`} value={password} onChange={e => setPassword(e.target.value)} />
+                                {loginError && <p className="text-red-500 text-xs">{loginError}</p>}
+                                <button type="submit" className="w-full bg-slate-900 text-white font-bold py-3 rounded-xl">Login as {selectedRole}</button>
                             </form>
                         </div>
                     </div>
@@ -123,33 +191,34 @@
             }
 
             return (
-                <div className="p-4 max-w-4xl mx-auto">
+                <div className="p-4 max-w-2xl mx-auto">
                     <div className="flex justify-between items-center mb-8">
-                        <h1 className="text-xl font-black">MF MANAGER</h1>
-                        <button onClick={() => { localStorage.removeItem('mf_session'); setIsAuthenticated(false); }} className="text-xs text-slate-400 font-bold uppercase">Logout</button>
-                    </div>
-
-                    <div className="grid gap-8">
-                        {/* Simplified list for Notepad users */}
-                        <div className="bg-white p-6 rounded-2xl shadow-sm border">
-                            <h2 className="font-bold mb-4 text-rose-600">ADD EXPENSE</h2>
-                            <div className="grid grid-cols-2 gap-2 mb-4">
-                                <input type="text" placeholder="Note" className="border p-2 rounded" value={expForm.note} onChange={e => setExpForm({...expForm, note: e.target.value})} />
-                                <input type="number" placeholder="Amount" className="border p-2 rounded" value={expForm.amtJaimin || expForm.amtKamal} onChange={e => setExpForm({...expForm, amtJaimin: e.target.value})} />
-                            </div>
-                            <button onClick={() => submitEntry('expense')} className="w-full bg-rose-600 text-white py-2 rounded-lg font-bold">Add Expense</button>
+                        <div>
+                            <h1 className="text-xl font-black">MF MANAGER</h1>
+                            <p className="text-[10px] font-bold text-slate-400 uppercase">Logged in: <span className="text-slate-900">{currentUser}</span></p>
                         </div>
-
-                        <div className="bg-white p-6 rounded-2xl shadow-sm border">
-                            <h2 className="font-bold mb-4 text-slate-800">RECENT HISTORY</h2>
-                            <div className="space-y-2">
-                                {transactions.map(t => (
-                                    <div key={t.id} className="flex justify-between border-b py-2 text-sm">
-                                        <span>{t.note} ({t.partner})</span>
-                                        <span className={t.type === 'income' ? 'text-emerald-600 font-bold' : 'text-rose-600 font-bold'}>₹{t.amount}</span>
+                        <button onClick={logout} className="text-[10px] font-bold text-rose-500 uppercase border border-rose-100 px-3 py-1 rounded-full">Logout</button>
+                    </div>
+                    <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 mb-6">
+                        <h2 className="font-bold mb-4 text-sm uppercase text-slate-400">Add New Entry</h2>
+                        <div className="space-y-3">
+                            <input type="text" placeholder="Description (e.g. Petrol)" className="w-full border p-3 rounded-xl outline-none focus:ring-2 focus:ring-slate-100" value={note} onChange={e => setNote(e.target.value)} />
+                            <input type="number" placeholder="Amount (₹)" className="w-full border p-3 rounded-xl outline-none focus:ring-2 focus:ring-slate-100" value={amount} onChange={e => setAmount(e.target.value)} />
+                            <button onClick={addEntry} className="w-full bg-slate-900 text-white py-3 rounded-xl font-bold">Save as {currentUser}</button>
+                        </div>
+                    </div>
+                    <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+                        <h2 className="font-bold mb-4 text-sm uppercase text-slate-400">History</h2>
+                        <div className="space-y-4">
+                            {transactions.map(t => (
+                                <div key={t.id} className="flex justify-between items-center border-b border-slate-50 pb-3">
+                                    <div>
+                                        <p className="text-sm font-bold text-slate-800">{t.note}</p>
+                                        <p className="text-[10px] text-slate-400 font-bold uppercase">{t.partner} • {t.date}</p>
                                     </div>
-                                ))}
-                            </div>
+                                    <span className="text-rose-600 font-black">₹{t.amount}</span>
+                                </div>
+                            ))}
                         </div>
                     </div>
                 </div>
