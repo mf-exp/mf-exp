@@ -40,20 +40,25 @@
     <script type="text/babel">
         const { useState, useEffect } = React;
 
-        // --- SAFE INITIALIZATION ---
-        let firebaseConfig = {};
-        try {
-            // Check if the environment provided a config, otherwise use an empty object to prevent crash
-            firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
-        } catch (e) {
-            console.error("Firebase config error:", e);
-        }
+        // --- FIREBASE CONFIGURATION ---
+        // Replace the values below with the ones from your Firebase Console
+        const firebaseConfig = {
+    apiKey: "AIzaSyBYKkA8fINDE7i-BoBHZFuhscnAPelphTw",
+    authDomain: "mf-exp.firebaseapp.com",
+    projectId: "mf-exp",
+    storageBucket: "mf-exp.firebasestorage.app",
+    messagingSenderId: "573599991150",
+    appId: "1:573599991150:web:cd04a5a5ea5f3d1a806d7f",
+    measurementId: "G-V4FVRXMWGQ"
+  };
 
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'motion-factory-ledger';
+        const appId = 'motion-factory-ledger';
 
-        // Initialize Firebase only if config exists
-        if (firebaseConfig.apiKey) {
-            firebase.initializeApp(firebaseConfig);
+        // Initialize Firebase
+        if (firebaseConfig.apiKey && firebaseConfig.apiKey !== "YOUR_API_KEY") {
+            if (!firebase.apps.length) {
+                firebase.initializeApp(firebaseConfig);
+            }
         }
 
         const auth = firebase.apps.length ? firebase.auth() : null;
@@ -82,6 +87,7 @@
 
                 const initAuth = async () => {
                     try {
+                        // Check if running in specialized environment with token, otherwise use anonymous
                         if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
                             await auth.signInWithCustomToken(__initial_auth_token);
                         } else {
@@ -171,13 +177,16 @@
             const expT = totals('expense');
             const incT = totals('income');
 
-            if (status === 'error') {
+            if (status === 'error' || (firebaseConfig.apiKey === "YOUR_API_KEY")) {
                 return (
                     <div className="flex items-center justify-center min-h-screen p-6 text-center">
-                        <div className="bg-white p-8 rounded-2xl shadow-xl border border-slate-200">
+                        <div className="bg-white p-8 rounded-2xl shadow-xl border border-slate-200 max-w-sm">
                             <Icon name="alert-triangle" size={48} className="text-rose-500 mx-auto mb-4" />
-                            <h2 className="text-xl font-bold mb-2">Configuration Missing</h2>
-                            <p className="text-sm text-slate-500">Please make sure to set your Firebase Config in the script tags.</p>
+                            <h2 className="text-xl font-bold mb-2">Setup Required</h2>
+                            <p className="text-sm text-slate-500 mb-4">Please edit the "firebaseConfig" section in the code with your actual Firebase project details.</p>
+                            <div className="text-[10px] bg-slate-100 p-2 rounded text-left font-mono break-all">
+                                code line: 40-47
+                            </div>
                         </div>
                     </div>
                 );
