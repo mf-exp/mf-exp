@@ -4,101 +4,49 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Motion Factory Manager</title>
-    <!-- PWA Primary Tags -->
-    <meta name="theme-color" content="#ffffff">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="default">
-    <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/599/599370.png">
     
+    <!-- PWA Tags -->
+    <meta name="theme-color" content="#0f172a">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    
+    <!-- Scripts -->
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
-    
-    <!-- Firebase SDKs -->
-    <script src="https://www.gstatic.com/firebasejs/11.6.1/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/11.6.1/firebase-auth-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore-compat.js"></script>
 
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
         body { 
             font-family: 'Plus Jakarta Sans', sans-serif; 
             background-color: #f8fafc;
-            overscroll-behavior-y: contain;
+            margin: 0;
+            padding: 0;
         }
-        .custom-scrollbar::-webkit-scrollbar {
-            width: 4px;
-            height: 4px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-track {
-            background: transparent;
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb {
-            background: #e2e8f0;
-            border-radius: 10px;
-        }
-        input::placeholder {
-            color: #cbd5e1;
-        }
-        input[type="date"]::-webkit-inner-spin-button,
-        input[type="date"]::-webkit-calendar-picker-indicator {
-            cursor: pointer;
-        }
-        @media (max-width: 640px) {
-            .mobile-p-0 { padding: 0 !important; }
-            .mobile-border-0 { border: 0 !important; }
-            .mobile-rounded-0 { border-radius: 0 !important; }
-        }
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
+        input[type="date"] { min-height: 38px; }
     </style>
 </head>
 <body class="text-slate-900 antialiased">
     <div id="root"></div>
 
+    <!-- Firebase SDKs loaded via Compat layer for easier single-file setup -->
+    <script src="https://www.gstatic.com/firebasejs/11.1.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/11.1.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/11.1.0/firebase-firestore-compat.js"></script>
+
     <script type="text/babel">
-        // --- Firebase Configuration ---
+        const { useState, useEffect } = React;
+
+        // --- Firebase Initialization ---
+        // These global variables are provided by the environment at runtime
         const firebaseConfig = JSON.parse(__firebase_config);
-        firebase.initializeApp(firebaseConfig);
+        const app = firebase.initializeApp(firebaseConfig);
         const auth = firebase.auth();
         const db = firebase.firestore();
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'motion-factory-default';
-
-        /** * PWA Self-Installation Logic */
-        const initPWA = () => {
-            const manifest = {
-                "name": "Motion Factory Manager",
-                "short_name": "MotionFactory",
-                "start_url": ".",
-                "display": "standalone",
-                "background_color": "#ffffff",
-                "theme_color": "#0f172a",
-                "icons": [{
-                    "src": "https://cdn-icons-png.flaticon.com/512/599/599370.png",
-                    "sizes": "512x512",
-                    "type": "image/png",
-                    "purpose": "any maskable"
-                }]
-            };
-            const stringManifest = JSON.stringify(manifest);
-            const blob = new Blob([stringManifest], {type: 'application/json'});
-            const manifestURL = URL.createObjectURL(blob);
-            document.querySelector('head').insertAdjacentHTML('beforeend', `<link rel="manifest" href="${manifestURL}">`);
-
-            if ('serviceWorker' in navigator) {
-                const swCode = `
-                    const CACHE_NAME = 'mf-v2';
-                    self.addEventListener('install', e => e.waitUntil(caches.open(CACHE_NAME)));
-                    self.addEventListener('fetch', e => e.respondWith(caches.match(e.request).then(res => res || fetch(e.request))));
-                `;
-                const swBlob = new Blob([swCode], {type: 'application/javascript'});
-                const swURL = URL.createObjectURL(swBlob);
-                navigator.serviceWorker.register(swURL).catch(err => console.log("SW failed", err));
-            }
-        };
-        initPWA();
-
-        const { useState, useEffect } = React;
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'motion-factory-ledger';
 
         const Icon = ({ name, size = 16, className = "" }) => {
             useEffect(() => { if (window.lucide) window.lucide.createIcons(); }, [name]);
@@ -110,13 +58,11 @@
             const [transactions, setTransactions] = useState([]);
             const [status, setStatus] = useState('connecting');
             const [toast, setToast] = useState(null);
-            const [isSaving, setIsSaving] = useState(false);
             const [deleteConfirm, setDeleteConfirm] = useState(null);
 
             const [expForm, setExpForm] = useState({ date: new Date().toISOString().split('T')[0], note: '', amtJaimin: '', amtKamal: '' });
             const [incForm, setIncForm] = useState({ date: new Date().toISOString().split('T')[0], note: '', amtJaimin: '', amtKamal: '' });
 
-            // 1. Authentication Effect
             useEffect(() => {
                 const initAuth = async () => {
                     try {
@@ -126,35 +72,29 @@
                             await auth.signInAnonymously();
                         }
                     } catch (err) {
-                        console.error("Auth error", err);
+                        console.error("Auth error:", err);
                         setStatus('offline');
                     }
                 };
                 initAuth();
-                const unsubscribe = auth.onAuthStateChanged(u => {
+                const unsubscribe = auth.onAuthStateChanged((u) => {
                     setUser(u);
-                    if (u) setStatus('online');
+                    if(u) setStatus('online');
                 });
                 return () => unsubscribe();
             }, []);
 
-            // 2. Data Fetching (Real-time Cloud Sync)
             useEffect(() => {
                 if (!user) return;
-
-                const collectionPath = `/artifacts/${appId}/public/data/transactions`;
-                const unsubscribe = db.collection(collectionPath)
+                const path = `artifacts/${appId}/public/data/ledger`;
+                const unsubscribe = db.collection(path)
                     .onSnapshot((snapshot) => {
                         const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                        // Sort in memory (Firebase Rule 2)
-                        const sortedData = data.sort((a, b) => new Date(b.date) - new Date(a.date));
-                        setTransactions(sortedData);
-                        setStatus('online');
+                        setTransactions(data.sort((a, b) => new Date(b.date) - new Date(a.date)));
                     }, (error) => {
-                        console.error("Firestore error", error);
+                        console.error("Firestore error:", error);
                         triggerToast("Sync Error");
                     });
-
                 return () => unsubscribe();
             }, [user]);
 
@@ -163,55 +103,42 @@
                 setTimeout(() => setToast(null), 3000);
             };
 
-            const formatDate = (dateStr) => {
-                if (!dateStr) return "";
-                const date = new Date(dateStr);
-                const day = String(date.getDate()).padStart(2, '0');
-                const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-                const month = months[date.getMonth()];
-                const year = String(date.getFullYear()).slice(-2);
-                return `${day}-${month}-'${year}`;
-            };
-
             const submitEntry = async (type) => {
-                if (!user) return triggerToast("Not Authenticated");
-                
+                if (!user) return;
                 const form = type === 'expense' ? expForm : incForm;
                 const amtJ = parseFloat(form.amtJaimin) || 0;
                 const amtK = parseFloat(form.amtKamal) || 0;
 
-                if (!form.date || !form.note || (amtJ === 0 && amtK === 0)) return triggerToast("Missing Details");
-
-                setIsSaving(true);
-                const entry = {
-                    date: form.date,
-                    note: form.note,
-                    amount: amtJ || amtK,
-                    partner: amtJ > 0 ? 'Jaimin' : 'Kamal',
-                    type,
-                    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-                    createdBy: user.uid
-                };
+                if (!form.date || !form.note || (amtJ === 0 && amtK === 0)) {
+                    triggerToast("Missing Details");
+                    return;
+                }
 
                 try {
-                    await db.collection(`/artifacts/${appId}/public/data/transactions`).add(entry);
-                    triggerToast("Saved to Cloud");
+                    await db.collection(`artifacts/${appId}/public/data/ledger`).add({
+                        date: form.date,
+                        note: form.note,
+                        amount: amtJ || amtK,
+                        partner: amtJ > 0 ? 'Jaimin' : 'Kamal',
+                        type,
+                        timestamp: Date.now()
+                    });
+
                     const reset = { date: new Date().toISOString().split('T')[0], note: '', amtJaimin: '', amtKamal: '' };
                     type === 'expense' ? setExpForm(reset) : setIncForm(reset);
-                } catch (err) {
+                    triggerToast("Cloud Updated");
+                } catch (e) {
                     triggerToast("Save Failed");
-                } finally {
-                    setIsSaving(false);
                 }
             };
 
             const confirmDelete = async () => {
                 if (!user || !deleteConfirm) return;
                 try {
-                    await db.doc(`/artifacts/${appId}/public/data/transactions/${deleteConfirm}`).delete();
+                    await db.doc(`artifacts/${appId}/public/data/ledger/${deleteConfirm}`).delete();
                     setDeleteConfirm(null);
-                    triggerToast("Entry Deleted");
-                } catch (err) {
+                    triggerToast("Deleted");
+                } catch (e) {
                     triggerToast("Delete Failed");
                 }
             };
@@ -219,9 +146,9 @@
             const totals = (type) => {
                 const filtered = transactions.filter(t => t.type === type);
                 return {
-                    jaimin: filtered.filter(t => t.partner === 'Jaimin').reduce((s, t) => s + (t.amount || 0), 0),
-                    kamal: filtered.filter(t => t.partner === 'Kamal').reduce((s, t) => s + (t.amount || 0), 0),
-                    total: filtered.reduce((s, t) => s + (t.amount || 0), 0)
+                    jaimin: filtered.filter(t => t.partner === 'Jaimin').reduce((s, t) => s + t.amount, 0),
+                    kamal: filtered.filter(t => t.partner === 'Kamal').reduce((s, t) => s + t.amount, 0),
+                    total: filtered.reduce((s, t) => s + t.amount, 0)
                 };
             };
 
@@ -229,76 +156,56 @@
             const incT = totals('income');
 
             return (
-                <div className="min-h-screen pb-12 relative flex flex-col">
-                    <header className="sticky top-0 z-50 bg-white/90 backdrop-blur-md border-b border-slate-200 h-14 shrink-0">
-                        <div className="max-w-7xl mx-auto px-4 h-full flex justify-between items-center">
+                <div className="min-h-screen pb-12">
+                    <header className="sticky top-0 z-50 bg-white/90 backdrop-blur-md border-b border-slate-200 h-14 flex items-center">
+                        <div className="max-w-7xl mx-auto px-4 w-full flex justify-between items-center">
                             <div className="flex items-center gap-2">
                                 <div className="w-8 h-8 bg-slate-900 rounded flex items-center justify-center">
                                     <Icon name="box" size={18} className="text-white" />
                                 </div>
-                                <h1 className="text-lg font-extrabold tracking-tighter text-slate-900">
-                                    MOTION<span className="text-slate-400 font-medium">FACTORY</span>
-                                </h1>
+                                <h1 className="text-lg font-extrabold tracking-tighter">MOTION<span className="text-slate-400">FACTORY</span></h1>
                             </div>
-                            <div className="flex items-center gap-3">
-                                <div className="flex items-center gap-1.5 px-2.5 py-1 bg-slate-100 border border-slate-200 rounded-md">
-                                    <div className={`w-2 h-2 rounded-full ${status === 'online' ? 'bg-emerald-500 animate-pulse shadow-[0_0_5px_#10b981]' : 'bg-rose-500'}`}></div>
-                                    <span className="text-[10px] font-bold text-slate-600 uppercase tracking-tight">
-                                        {status === 'online' ? 'Syncing' : 'Offline'}
-                                    </span>
-                                </div>
+                            <div className={`px-2 py-1 rounded-md border text-[10px] font-bold uppercase flex items-center gap-1.5 ${status === 'online' ? 'bg-emerald-50 border-emerald-100 text-emerald-600' : 'bg-rose-50 border-rose-100 text-rose-600'}`}>
+                                <div className={`w-1.5 h-1.5 rounded-full ${status === 'online' ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`}></div>
+                                {status === 'online' ? 'Cloud Live' : 'Connecting'}
                             </div>
                         </div>
                     </header>
 
-                    <main className="max-w-7xl mx-auto w-full px-0 sm:px-4 mt-4 grid grid-cols-1 lg:grid-cols-2 gap-8 flex-grow">
-                        {/* Expenses Section */}
-                        <div className="space-y-3 px-4 sm:px-0">
-                            <div className="flex items-center justify-between px-1">
-                                <div className="flex items-center gap-2">
-                                    <h3 className="text-base font-bold text-slate-900">Expenses</h3>
-                                    <span className="text-[11px] bg-rose-50 text-rose-600 px-2 py-0.5 rounded font-bold border border-rose-100 uppercase">Out</span>
-                                </div>
-                                <div className="text-base font-black text-rose-600">₹{expT.total.toLocaleString()}</div>
+                    <main className="max-w-7xl mx-auto px-4 mt-6 grid grid-cols-1 lg:grid-cols-2 gap-8">
+                        {/* Expense Section */}
+                        <div className="space-y-4">
+                            <div className="flex justify-between items-end px-1">
+                                <h2 className="text-sm font-black uppercase tracking-widest text-slate-400">Expenses</h2>
+                                <div className="text-xl font-black text-rose-600">₹{expT.total.toLocaleString()}</div>
                             </div>
-
-                            <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden mobile-rounded-0 mobile-border-0">
-                                <div className="custom-scrollbar overflow-x-auto">
-                                    <table className="w-full text-left border-collapse min-w-[450px]">
-                                        <thead>
-                                            <tr className="bg-slate-100 border-b border-slate-200 text-slate-700 font-bold text-[13px]">
-                                                <td colSpan="2" className="p-3 text-right text-[11px] text-slate-400 uppercase tracking-wider">Total Expense</td>
-                                                <td className="p-3 text-blue-700 border-l border-slate-200/50">₹{expT.jaimin.toLocaleString()}</td>
-                                                <td className="p-3 text-pink-500 border-l border-slate-200/50">₹{expT.kamal.toLocaleString()}</td>
-                                                <td></td>
-                                            </tr>
-                                            <tr className="border-b border-slate-100 bg-slate-50/50 text-[10px] font-bold text-slate-400 uppercase tracking-tight">
-                                                <th className="p-3 w-32">Date</th>
-                                                <th className="p-3">Note</th>
-                                                <th className="p-3 w-24 text-blue-600">Jaimin</th>
-                                                <th className="p-3 w-24 text-pink-500">Kamal</th>
-                                                <th className="p-3 w-10 text-center"></th>
+                            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                                <div className="overflow-x-auto custom-scrollbar">
+                                    <table className="w-full text-left text-sm">
+                                        <thead className="bg-slate-50 border-b border-slate-200 text-[10px] font-bold uppercase text-slate-400">
+                                            <tr>
+                                                <th className="p-3">Entry</th>
+                                                <th className="p-3 text-blue-600">Jaimin</th>
+                                                <th className="p-3 text-purple-600">Kamal</th>
+                                                <th className="p-3 w-10"></th>
                                             </tr>
                                         </thead>
-                                        <tbody className="text-[13px]">
-                                            <tr className="bg-rose-50/20 border-b border-rose-100/30">
-                                                <td className="p-2"><input type="date" className="w-full bg-white border border-slate-200 rounded p-2 text-xs outline-none focus:ring-1 focus:ring-rose-200" value={expForm.date} onChange={e => setExpForm({...expForm, date: e.target.value})} /></td>
-                                                <td className="p-2"><input type="text" placeholder="Note..." className="w-full bg-white border border-slate-200 rounded p-2 text-xs outline-none focus:ring-1 focus:ring-rose-200" value={expForm.note} onChange={e => setExpForm({...expForm, note: e.target.value})} /></td>
-                                                <td className="p-2"><input type="number" placeholder="0" className="w-full bg-white border border-slate-200 rounded p-2 text-sm font-bold text-blue-700 outline-none focus:ring-1 focus:ring-rose-200" value={expForm.amtJaimin} onChange={e => setExpForm({...expForm, amtJaimin: e.target.value, amtKamal: ''})} /></td>
-                                                <td className="p-2"><input type="number" placeholder="0" className="w-full bg-white border border-slate-200 rounded p-2 text-sm font-bold text-pink-500 outline-none focus:ring-1 focus:ring-rose-200" value={expForm.amtKamal} onChange={e => setExpForm({...expForm, amtKamal: e.target.value, amtJaimin: ''})} /></td>
-                                                <td className="p-2 text-center"><button disabled={isSaving} onClick={() => submitEntry('expense')} className="bg-rose-600 text-white w-9 h-9 rounded-lg flex items-center justify-center hover:bg-rose-700 active:scale-95 shadow-sm mx-auto disabled:opacity-50"><Icon name={isSaving ? "loader-2" : "plus"} size={18} className={isSaving ? "animate-spin" : ""} /></button></td>
+                                        <tbody>
+                                            <tr className="bg-rose-50/20 border-b border-rose-100/50">
+                                                <td className="p-2 space-y-1">
+                                                    <input type="date" className="w-full p-1.5 border rounded text-xs" value={expForm.date} onChange={e => setExpForm({...expForm, date: e.target.value})} />
+                                                    <input type="text" placeholder="What for?" className="w-full p-1.5 border rounded text-xs" value={expForm.note} onChange={e => setExpForm({...expForm, note: e.target.value})} />
+                                                </td>
+                                                <td className="p-2 align-bottom"><input type="number" placeholder="0" className="w-full p-1.5 border rounded font-bold text-blue-600" value={expForm.amtJaimin} onChange={e => setExpForm({...expForm, amtJaimin: e.target.value, amtKamal: ''})} /></td>
+                                                <td className="p-2 align-bottom"><input type="number" placeholder="0" className="w-full p-1.5 border rounded font-bold text-purple-600" value={expForm.amtKamal} onChange={e => setExpForm({...expForm, amtKamal: e.target.value, amtJaimin: ''})} /></td>
+                                                <td className="p-2 align-bottom"><button onClick={() => submitEntry('expense')} className="bg-rose-600 text-white p-2 rounded-lg w-full flex justify-center"><Icon name="plus" /></button></td>
                                             </tr>
                                             {transactions.filter(t => t.type === 'expense').map(t => (
-                                                <tr key={t.id} className="group border-b border-slate-50 hover:bg-slate-50/50">
-                                                    <td className="p-3 text-slate-400 font-medium whitespace-nowrap">{formatDate(t.date)}</td>
-                                                    <td className="p-3 font-semibold text-slate-700 truncate max-w-[150px]">{t.note}</td>
-                                                    <td className="p-3 text-blue-600 font-bold">{t.partner === 'Jaimin' ? `₹${t.amount.toLocaleString()}` : '—'}</td>
-                                                    <td className="p-3 text-pink-500 font-bold">{t.partner === 'Kamal' ? `₹${t.amount.toLocaleString()}` : '—'}</td>
-                                                    <td className="p-3 text-center">
-                                                        <button onClick={() => setDeleteConfirm(t.id)} className="text-slate-300 hover:text-rose-500 p-2 transition-colors">
-                                                            <Icon name="trash-2" size={14} />
-                                                        </button>
-                                                    </td>
+                                                <tr key={t.id} className="border-b border-slate-50 hover:bg-slate-50">
+                                                    <td className="p-3"><div className="text-[10px] text-slate-400">{t.date}</div><div className="font-bold">{t.note}</div></td>
+                                                    <td className="p-3 font-bold text-blue-600">{t.partner === 'Jaimin' ? `₹${t.amount}` : '-'}</td>
+                                                    <td className="p-3 font-bold text-purple-600">{t.partner === 'Kamal' ? `₹${t.amount}` : '-'}</td>
+                                                    <td className="p-3"><button onClick={() => setDeleteConfirm(t.id)} className="text-slate-300 hover:text-rose-500"><Icon name="trash-2" size={14} /></button></td>
                                                 </tr>
                                             ))}
                                         </tbody>
@@ -308,52 +215,38 @@
                         </div>
 
                         {/* Income Section */}
-                        <div className="space-y-3 px-4 sm:px-0 mt-4 lg:mt-0">
-                            <div className="flex items-center justify-between px-1">
-                                <div className="flex items-center gap-2">
-                                    <h3 className="text-base font-bold text-slate-900">Income</h3>
-                                    <span className="text-[11px] bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded font-bold border border-emerald-100 uppercase">In</span>
-                                </div>
-                                <div className="text-base font-black text-emerald-600">₹{incT.total.toLocaleString()}</div>
+                        <div className="space-y-4">
+                            <div className="flex justify-between items-end px-1">
+                                <h2 className="text-sm font-black uppercase tracking-widest text-slate-400">Income</h2>
+                                <div className="text-xl font-black text-emerald-600">₹{incT.total.toLocaleString()}</div>
                             </div>
-
-                            <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden mobile-rounded-0 mobile-border-0">
-                                <div className="custom-scrollbar overflow-x-auto">
-                                    <table className="w-full text-left border-collapse min-w-[450px]">
-                                        <thead>
-                                            <tr className="bg-slate-100 border-b border-slate-200 text-slate-700 font-bold text-[13px]">
-                                                <td colSpan="2" className="p-3 text-right text-[11px] text-slate-400 uppercase tracking-wider">Total Income</td>
-                                                <td className="p-3 text-blue-700 border-l border-slate-200/50">₹{incT.jaimin.toLocaleString()}</td>
-                                                <td className="p-3 text-pink-500 border-l border-slate-200/50">₹{incT.kamal.toLocaleString()}</td>
-                                                <td></td>
-                                            </tr>
-                                            <tr className="border-b border-slate-100 bg-slate-50/50 text-[10px] font-bold text-slate-400 uppercase tracking-tight">
-                                                <th className="p-3 w-32">Date</th>
-                                                <th className="p-3">Note</th>
-                                                <th className="p-3 w-24 text-blue-600">Jaimin</th>
-                                                <th className="p-3 w-24 text-pink-500">Kamal</th>
-                                                <th className="p-3 w-10 text-center"></th>
+                            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                                <div className="overflow-x-auto custom-scrollbar">
+                                    <table className="w-full text-left text-sm">
+                                        <thead className="bg-slate-50 border-b border-slate-200 text-[10px] font-bold uppercase text-slate-400">
+                                            <tr>
+                                                <th className="p-3">Entry</th>
+                                                <th className="p-3 text-blue-600">Jaimin</th>
+                                                <th className="p-3 text-purple-600">Kamal</th>
+                                                <th className="p-3 w-10"></th>
                                             </tr>
                                         </thead>
-                                        <tbody className="text-[13px]">
-                                            <tr className="bg-emerald-50/20 border-b border-emerald-100/30">
-                                                <td className="p-2"><input type="date" className="w-full bg-white border border-slate-200 rounded p-2 text-xs outline-none focus:ring-1 focus:ring-emerald-200" value={incForm.date} onChange={e => setIncForm({...incForm, date: e.target.value})} /></td>
-                                                <td className="p-2"><input type="text" placeholder="Source..." className="w-full bg-white border border-slate-200 rounded p-2 text-xs outline-none focus:ring-1 focus:ring-emerald-200" value={incForm.note} onChange={e => setIncForm({...incForm, note: e.target.value})} /></td>
-                                                <td className="p-2"><input type="number" placeholder="0" className="w-full bg-white border border-slate-200 rounded p-2 text-sm font-bold text-blue-700 outline-none focus:ring-1 focus:ring-emerald-200" value={incForm.amtJaimin} onChange={e => setIncForm({...incForm, amtJaimin: e.target.value, amtKamal: ''})} /></td>
-                                                <td className="p-2"><input type="number" placeholder="0" className="w-full bg-white border border-slate-200 rounded p-2 text-sm font-bold text-pink-500 outline-none focus:ring-1 focus:ring-emerald-200" value={incForm.amtKamal} onChange={e => setIncForm({...incForm, amtKamal: e.target.value, amtJaimin: ''})} /></td>
-                                                <td className="p-2 text-center"><button disabled={isSaving} onClick={() => submitEntry('income')} className="bg-emerald-600 text-white w-9 h-9 rounded-lg flex items-center justify-center hover:bg-emerald-700 active:scale-95 shadow-sm mx-auto disabled:opacity-50"><Icon name={isSaving ? "loader-2" : "plus"} size={18} className={isSaving ? "animate-spin" : ""} /></button></td>
+                                        <tbody>
+                                            <tr className="bg-emerald-50/20 border-b border-emerald-100/50">
+                                                <td className="p-2 space-y-1">
+                                                    <input type="date" className="w-full p-1.5 border rounded text-xs" value={incForm.date} onChange={e => setIncForm({...incForm, date: e.target.value})} />
+                                                    <input type="text" placeholder="Source?" className="w-full p-1.5 border rounded text-xs" value={incForm.note} onChange={e => setIncForm({...incForm, note: e.target.value})} />
+                                                </td>
+                                                <td className="p-2 align-bottom"><input type="number" placeholder="0" className="w-full p-1.5 border rounded font-bold text-blue-600" value={incForm.amtJaimin} onChange={e => setIncForm({...incForm, amtJaimin: e.target.value, amtKamal: ''})} /></td>
+                                                <td className="p-2 align-bottom"><input type="number" placeholder="0" className="w-full p-1.5 border rounded font-bold text-purple-600" value={incForm.amtKamal} onChange={e => setIncForm({...incForm, amtKamal: e.target.value, amtJaimin: ''})} /></td>
+                                                <td className="p-2 align-bottom"><button onClick={() => submitEntry('income')} className="bg-emerald-600 text-white p-2 rounded-lg w-full flex justify-center"><Icon name="plus" /></button></td>
                                             </tr>
                                             {transactions.filter(t => t.type === 'income').map(t => (
-                                                <tr key={t.id} className="group border-b border-slate-50 hover:bg-slate-50/50">
-                                                    <td className="p-3 text-slate-400 font-medium whitespace-nowrap">{formatDate(t.date)}</td>
-                                                    <td className="p-3 font-semibold text-slate-700 truncate max-w-[150px]">{t.note}</td>
-                                                    <td className="p-3 text-blue-600 font-bold">{t.partner === 'Jaimin' ? `₹${t.amount.toLocaleString()}` : '—'}</td>
-                                                    <td className="p-3 text-pink-500 font-bold">{t.partner === 'Kamal' ? `₹${t.amount.toLocaleString()}` : '—'}</td>
-                                                    <td className="p-3 text-center">
-                                                        <button onClick={() => setDeleteConfirm(t.id)} className="text-slate-300 hover:text-rose-500 p-2 transition-colors">
-                                                            <Icon name="trash-2" size={14} />
-                                                        </button>
-                                                    </td>
+                                                <tr key={t.id} className="border-b border-slate-50 hover:bg-slate-50">
+                                                    <td className="p-3"><div className="text-[10px] text-slate-400">{t.date}</div><div className="font-bold">{t.note}</div></td>
+                                                    <td className="p-3 font-bold text-blue-600">{t.partner === 'Jaimin' ? `₹${t.amount}` : '-'}</td>
+                                                    <td className="p-3 font-bold text-purple-600">{t.partner === 'Kamal' ? `₹${t.amount}` : '-'}</td>
+                                                    <td className="p-3"><button onClick={() => setDeleteConfirm(t.id)} className="text-slate-300 hover:text-rose-500"><Icon name="trash-2" size={14} /></button></td>
                                                 </tr>
                                             ))}
                                         </tbody>
@@ -363,37 +256,24 @@
                         </div>
                     </main>
 
-                    {/* Delete Confirmation Modal */}
-                    {deleteConfirm && (
-                        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-[2px] z-[110] flex items-center justify-center p-4">
-                            <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6 animate-in zoom-in duration-200">
-                                <div className="w-12 h-12 bg-rose-50 text-rose-600 rounded-full flex items-center justify-center mb-4">
-                                    <Icon name="alert-circle" size={24} />
-                                </div>
-                                <h3 className="text-lg font-bold text-slate-900 mb-2">Delete Entry?</h3>
-                                <p className="text-sm text-slate-500 mb-6">This action cannot be undone and will remove the data from all synced devices.</p>
-                                <div className="flex gap-3">
-                                    <button 
-                                        onClick={() => setDeleteConfirm(null)}
-                                        className="flex-1 px-4 py-2 rounded-xl text-sm font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors"
-                                    >
-                                        Cancel
-                                    </button>
-                                    <button 
-                                        onClick={confirmDelete}
-                                        className="flex-1 px-4 py-2 rounded-xl text-sm font-bold text-white bg-rose-600 hover:bg-rose-700 transition-colors"
-                                    >
-                                        Delete
-                                    </button>
-                                </div>
-                            </div>
+                    {/* Simple Toast */}
+                    {toast && (
+                        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-slate-900 text-white px-6 py-2 rounded-full text-[10px] font-bold uppercase tracking-widest z-[100] shadow-2xl animate-bounce">
+                            {toast}
                         </div>
                     )}
 
-                    {toast && (
-                        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-slate-900 text-white px-5 py-2.5 rounded-full text-[11px] font-black uppercase tracking-widest shadow-xl z-[100] border border-slate-700 flex items-center gap-2 animate-in slide-in-from-bottom-2">
-                            <div className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                            {toast}
+                    {/* Delete Confirmation */}
+                    {deleteConfirm && (
+                        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[110] flex items-center justify-center p-4">
+                            <div className="bg-white rounded-2xl p-6 max-w-xs w-full shadow-2xl">
+                                <h3 className="font-bold mb-2">Confirm Delete?</h3>
+                                <p className="text-xs text-slate-500 mb-6">This will remove the entry from all devices permanently.</p>
+                                <div className="flex gap-2">
+                                    <button onClick={() => setDeleteConfirm(null)} className="flex-1 py-2 bg-slate-100 rounded-lg text-xs font-bold">Cancel</button>
+                                    <button onClick={confirmDelete} className="flex-1 py-2 bg-rose-600 text-white rounded-lg text-xs font-bold">Delete</button>
+                                </div>
+                            </div>
                         </div>
                     )}
                 </div>
